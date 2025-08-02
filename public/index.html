@@ -1,0 +1,35 @@
+
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Aile Albümümüz</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #f0f0f0; padding: 20px; }
+    .gallery { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; }
+    .item { background: white; padding: 10px; border-radius: 10px; box-shadow: 0 0 5px gray; max-width: 300px; }
+    video, img { max-width: 100%; border-radius: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Aile Albümüne Hoş Geldiniz 📸</h1>
+  <a href="/upload.html">Anı Yükle +</a>
+  <a href="/logout">Çıkış Yap</a>
+  <div class="gallery" id="gallery"></div>
+  <script>
+    fetch('/data').then(res => res.json()).then(data => {
+      const gallery = document.getElementById('gallery');
+      data.reverse().forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'item';
+        if (item.type.startsWith('image')) {
+          div.innerHTML = `<img src="${item.url}" alt="">`;
+        } else if (item.type.startsWith('video')) {
+          div.innerHTML = `<video src="${item.url}" controls></video>`;
+        }
+        gallery.appendChild(div);
+      });
+    });
+  </script>
+</body>
+</html>
