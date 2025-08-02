@@ -8,11 +8,9 @@ const cookieParser = require('cookie-parser');
 const app = express();
 const PORT = 3000;
 
-// Uploads klasörü kontrolü
+// Uploads klasörü güvenli oluşturma (recursive ile)
 const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-}
+fs.mkdirSync(uploadDir, { recursive: true });
 
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
@@ -22,7 +20,7 @@ app.use(cookieParser());
 const users = JSON.parse(fs.readFileSync('users.json'));
 let memoryList = fs.existsSync('data.json') ? JSON.parse(fs.readFileSync('data.json')) : [];
 
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: uploadDir });
 
 function auth(req, res, next) {
   if (req.cookies.kullanici) {
@@ -82,3 +80,4 @@ app.get('/logout', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Site çalışıyor: http://localhost:${PORT}`);
 });
+
