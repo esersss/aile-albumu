@@ -11,27 +11,32 @@ const PORT = process.env.PORT || 3000;
 // Uploads klasörü yolu
 const uploadDir = path.join(__dirname, 'uploads');
 
-// Klasörü güvenli bir şekilde oluştur (recursive true hata fırlatmaz)
-try {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log('Uploads klasörü hazır.');
-} catch (err) {
-  console.error('Uploads klasörü oluşturulamadı:', err);
+// Klasör varsa oluşturma (çift çalışsa bile hata vermez)
+if (!fs.existsSync(uploadDir)) {
+  try {
+    fs.mkdirSync(uploadDir, { recursive: true });
+    console.log('Uploads klasörü oluşturuldu.');
+  } catch (err) {
+    console.error('Uploads klasörü oluşturulamadı:', err);
+  }
+} else {
+  console.log('Uploads klasörü zaten var.');
 }
 
-// Middleware
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Kullanıcı verileri ve data dosyası
+// Kullanıcılar ve memoryList
 const users = JSON.parse(fs.readFileSync('users.json'));
-let memoryList = fs.existsSync('data.json') ? JSON.parse(fs.readFileSync('data.json')) : [];
+let memoryList = fs.existsSync('data.json')
+  ? JSON.parse(fs.readFileSync('data.json'))
+  : [];
 
+// Multer ayarı
 const upload = multer({ dest: 'uploads/' });
 
-// Basit auth kontrolü
 function auth(req, res, next) {
   if (req.cookies.kullanici) {
     next();
@@ -40,7 +45,6 @@ function auth(req, res, next) {
   }
 }
 
-// Login endpoint
 app.post('/login', (req, res) => {
   const { ad, soyad, sifre } = req.body;
   const user = users.find(
@@ -54,27 +58,24 @@ app.post('/login', (req, res) => {
   }
 });
 
-// Ana sayfa
 app.get('/', auth, (req, res) => {
   res.sendFile(__dirname + '/public/index.html');
 });
 
-// Upload sayfası
 app.get('/upload.html', auth, (req, res) => {
   res.sendFile(__dirname + '/public/upload.html');
 });
 
-// Data JSON
 app.get('/data', auth, (req, res) => {
   res.json(memoryList);
 });
 
-// Upload işlemi
 app.post('/upload', auth, upload.single('media'), (req, res) => {
   const file = req.file;
   const ext = path.extname(file.originalname);
   const newName = `${file.filename}${ext}`;
   const newPath = path.join('uploads', newName);
+
   fs.renameSync(file.path, newPath);
 
   const item = {
@@ -89,13 +90,11 @@ app.post('/upload', auth, upload.single('media'), (req, res) => {
   res.redirect('/');
 });
 
-// Logout
 app.get('/logout', (req, res) => {
   res.clearCookie('kullanici');
   res.redirect('/login.html');
 });
 
-// Server
 app.listen(PORT, () => {
   console.log(`Site çalışıyor: http://localhost:${PORT}`);
 });
