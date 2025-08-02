@@ -6,21 +6,48 @@ const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-// Uploads klasörü güvenli oluşturma (recursive ile)
+// Uploads klasörü yolu
 const uploadDir = path.join(__dirname, 'uploads');
-fs.mkdirSync(uploadDir, { recursive: true });
+
+// Klasör oluşturma (varsa hata vermesin)
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+    console.log('uploads klasörü oluşturuldu.');
+  } else {
+    console.log('uploads klasörü zaten var.');
+  }
+} catch (err) {
+  console.error('Uploads klasörü oluşturulamadı:', err);
+}
 
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-const users = JSON.parse(fs.readFileSync('users.json'));
-let memoryList = fs.existsSync('data.json') ? JSON.parse(fs.readFileSync('data.json')) : [];
+// users.json dosyası varsa oku
+let users = [];
+try {
+  if (fs.existsSync('users.json')) {
+    users = JSON.parse(fs.readFileSync('users.json', 'utf8'));
+  }
+} catch (err) {
+  console.error('users.json okunamadı:', err);
+}
 
-const upload = multer({ dest: uploadDir });
+let memoryList = [];
+try {
+  if (fs.existsSync('data.json')) {
+    memoryList = JSON.parse(fs.readFileSync('data.json', 'utf8'));
+  }
+} catch (err) {
+  console.error('data.json okunamadı:', err);
+}
+
+const upload = multer({ dest: 'uploads/' });
 
 function auth(req, res, next) {
   if (req.cookies.kullanici) {
@@ -32,7 +59,9 @@ function auth(req, res, next) {
 
 app.post('/login', (req, res) => {
   const { ad, soyad, sifre } = req.body;
-  const user = users.find(u => u.ad === ad && u.soyad === soyad && u.sifre === sifre);
+  const user = users.find(
+    u => u.ad === ad && u.soyad === soyad && u.sifre === sifre
+  );
   if (user) {
     res.cookie('kullanici', `${ad} ${soyad}`, { maxAge: 3600000 });
     res.redirect('/');
@@ -42,11 +71,11 @@ app.post('/login', (req, res) => {
 });
 
 app.get('/', auth, (req, res) => {
-  res.sendFile(__dirname + '/public/index.html');
+  res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
 app.get('/upload.html', auth, (req, res) => {
-  res.sendFile(__dirname + '/public/upload.html');
+  res.sendFile(path.join(__dirname, 'public/upload.html'));
 });
 
 app.get('/data', auth, (req, res) => {
@@ -58,7 +87,12 @@ app.post('/upload', auth, upload.single('media'), (req, res) => {
   const ext = path.extname(file.originalname);
   const newName = `${file.filename}${ext}`;
   const newPath = path.join('uploads', newName);
-  fs.renameSync(file.path, newPath);
+
+  try {
+    fs.renameSync(file.path, newPath);
+  } catch (err) {
+    console.error('Dosya taşınamadı:', err);
+  }
 
   const item = {
     url: `/uploads/${newName}`,
@@ -68,7 +102,13 @@ app.post('/upload', auth, upload.single('media'), (req, res) => {
   };
 
   memoryList.push(item);
-  fs.writeFileSync('data.json', JSON.stringify(memoryList, null, 2));
+
+  try {
+    fs.writeFileSync('data.json', JSON.stringify(memoryList, null, 2));
+  } catch (err) {
+    console.error('data.json kaydedilemedi:', err);
+  }
+
   res.redirect('/');
 });
 
