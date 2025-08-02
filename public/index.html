@@ -3,33 +3,34 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <title>Aile Albümümüz</title>
-  <style>
-    body { font-family: sans-serif; text-align: center; background: #f0f0f0; padding: 20px; }
-    .gallery { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; }
-    .item { background: white; padding: 10px; border-radius: 10px; box-shadow: 0 0 5px gray; max-width: 300px; }
-    video, img { max-width: 100%; border-radius: 10px; }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fotoğraf Yükleme</title>
 </head>
 <body>
-  <h1>Aile Albümüne Hoş Geldiniz 📸</h1>
-  <a href="/upload.html">Anı Yükle +</a>
-  <a href="/logout">Çıkış Yap</a>
-  <div class="gallery" id="gallery"></div>
+  <h1>Fotoğraf Yükle</h1>
+  <form id="uploadForm">
+    <input type="file" name="photo" id="photoInput" required />
+    <button type="submit">Yükle</button>
+  </form>
+
+  <p id="result"></p>
+
   <script>
-    fetch('/data').then(res => res.json()).then(data => {
-      const gallery = document.getElementById('gallery');
-      data.reverse().forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'item';
-        if (item.type.startsWith('image')) {
-          div.innerHTML = `<img src="${item.url}" alt="">`;
-        } else if (item.type.startsWith('video')) {
-          div.innerHTML = `<video src="${item.url}" controls></video>`;
-        }
-        gallery.appendChild(div);
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData();
+      const fileField = document.getElementById('photoInput');
+      formData.append('photo', fileField.files[0]);
+
+      const response = await fetch('/upload', {
+        method: 'POST',
+        body: formData
       });
+
+      const result = await response.json();
+      document.getElementById('result').textContent = result.message;
     });
   </script>
 </body>
 </html>
+
