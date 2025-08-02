@@ -1,55 +1,61 @@
-const express = require('express');
-const path = require('path');
-const fs = require('fs');
-const bodyParser = require('body-parser');
-const cookieParser = require('cookie-parser');
-const multer = require('multer');
+const express = require("express");
+const bodyParser = require("body-parser");
+const multer = require("multer");
+const cors = require("cors");
+const path = require("path");
+const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// === Uploads klasörü ===
-const uploadDir = path.join(__dirname, 'uploads');
+app.use(cors());
+app.use(bodyParser.json());
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-try {
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-    console.log('Uploads klasörü oluşturuldu.');
-  } else {
-    console.log('Uploads klasörü zaten var.');
-  }
-} catch (err) {
-  console.error('Uploads klasörü oluşturulamadı:', err);
+// --- uploads klasörü kontrolü (önemli) ---
+const uploadDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
 }
 
-// === Multer ayarı (mkdir yapmaz, sadece kaydeder) ===
+// Multer ayarı
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname);
+    cb(null, Date.now() + "-" + file.originalname);
+  },
+});
+const upload = multer({ storage: storage });
+
+// Ana route
+app.get("/", (req, res) => {
+  res.send("Sunucu Çalışıyor");
+});
+
+// Fotoğraf yükleme test formu (GET)
+app.get("/upload", (req, res) => {
+  res.send(`
+    <h2>Fotoğraf Yükle</h2>
+    <form method="POST" action="/upload" enctype="multipart/form-data">
+      <input type="file" name="file" />
+      <button type="submit">Yükle</button>
+    </form>
+  `);
+});
+
+// Fotoğraf yükleme (POST)
+app.post("/upload", upload.single("file"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).send("Dosya yüklenmedi.");
   }
-});
-const upload = multer({ storage });
-
-// === Middleware ===
-app.use(express.static('public'));
-app.use('/uploads', express.static('uploads'));
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(cookieParser());
-
-// === Ana route ===
-app.get('/', (req, res) => {
-  res.send('Sunucu çalışıyor');
+  res.send("Dosya yüklendi: " + req.file.filename);
 });
 
-// === Dosya yükleme route ===
-app.post('/upload', upload.single('file'), (req, res) => {
-  res.send('Dosya yüklendi: ' + req.file.filename);
-});
+// Buradan itibaren senin diğer route’ların varsa onlar aynı şekilde devam edecek
 
-// === Sunucu başlatma ===
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Server çalışıyor: ${PORT}`);
 });
+
