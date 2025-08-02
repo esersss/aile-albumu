@@ -1,48 +1,54 @@
 const express = require('express');
-const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const cors = require('cors');
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+const PORT = process.env.PORT || 3000;
 
-// Upload klasörü yoksa oluştur
+app.use(cors());
+
+// Public klasörünü statik olarak aç
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Uploads klasörünü statik olarak aç (fotoğraflar görünsün)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// uploads klasörü yoksa oluştur
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
-// Multer ayarları
+// Multer ayarları (dosya nereye kaydedilecek)
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
   },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname);
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + path.extname(file.originalname));
   }
 });
 const upload = multer({ storage: storage });
 
-// public klasöründeki statik dosyaları sun
-app.use(express.static(path.join(__dirname, 'public')));
+// Ana sayfa testi
+app.get('/', (req, res) => {
+  res.send('Sunucu Çalışıyor');
+});
 
-// Foto yükleme endpointi
+// Fotoğraf yükleme endpointi
 app.post('/upload', upload.single('photo'), (req, res) => {
   if (!req.file) {
-    return res.status(400).json({ message: 'Fotoğraf yüklenmedi' });
+    return res.status(400).json({ message: 'Dosya yüklenmedi' });
   }
   res.json({ message: 'Fotoğraf yüklendi', file: req.file.filename });
 });
 
-// Ana sayfa
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server ${PORT} portunda çalışıyor`));
 
 
 
