@@ -11,44 +11,27 @@ const PORT = process.env.PORT || 3000;
 // Uploads klasörü yolu
 const uploadDir = path.join(__dirname, 'uploads');
 
-// Klasör oluşturma (varsa hata vermesin)
+// Klasörü güvenli bir şekilde oluştur (recursive true hata fırlatmaz)
 try {
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-    console.log('uploads klasörü oluşturuldu.');
-  } else {
-    console.log('uploads klasörü zaten var.');
-  }
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log('Uploads klasörü hazır.');
 } catch (err) {
   console.error('Uploads klasörü oluşturulamadı:', err);
 }
 
+// Middleware
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// users.json dosyası varsa oku
-let users = [];
-try {
-  if (fs.existsSync('users.json')) {
-    users = JSON.parse(fs.readFileSync('users.json', 'utf8'));
-  }
-} catch (err) {
-  console.error('users.json okunamadı:', err);
-}
-
-let memoryList = [];
-try {
-  if (fs.existsSync('data.json')) {
-    memoryList = JSON.parse(fs.readFileSync('data.json', 'utf8'));
-  }
-} catch (err) {
-  console.error('data.json okunamadı:', err);
-}
+// Kullanıcı verileri ve data dosyası
+const users = JSON.parse(fs.readFileSync('users.json'));
+let memoryList = fs.existsSync('data.json') ? JSON.parse(fs.readFileSync('data.json')) : [];
 
 const upload = multer({ dest: 'uploads/' });
 
+// Basit auth kontrolü
 function auth(req, res, next) {
   if (req.cookies.kullanici) {
     next();
@@ -57,10 +40,11 @@ function auth(req, res, next) {
   }
 }
 
+// Login endpoint
 app.post('/login', (req, res) => {
   const { ad, soyad, sifre } = req.body;
   const user = users.find(
-    u => u.ad === ad && u.soyad === soyad && u.sifre === sifre
+    (u) => u.ad === ad && u.soyad === soyad && u.sifre === sifre
   );
   if (user) {
     res.cookie('kullanici', `${ad} ${soyad}`, { maxAge: 3600000 });
@@ -70,53 +54,48 @@ app.post('/login', (req, res) => {
   }
 });
 
+// Ana sayfa
 app.get('/', auth, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/index.html'));
+  res.sendFile(__dirname + '/public/index.html');
 });
 
+// Upload sayfası
 app.get('/upload.html', auth, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/upload.html'));
+  res.sendFile(__dirname + '/public/upload.html');
 });
 
+// Data JSON
 app.get('/data', auth, (req, res) => {
   res.json(memoryList);
 });
 
+// Upload işlemi
 app.post('/upload', auth, upload.single('media'), (req, res) => {
   const file = req.file;
   const ext = path.extname(file.originalname);
   const newName = `${file.filename}${ext}`;
   const newPath = path.join('uploads', newName);
-
-  try {
-    fs.renameSync(file.path, newPath);
-  } catch (err) {
-    console.error('Dosya taşınamadı:', err);
-  }
+  fs.renameSync(file.path, newPath);
 
   const item = {
     url: `/uploads/${newName}`,
     type: file.mimetype,
     ekleyen: req.cookies.kullanici,
-    date: new Date()
+    date: new Date(),
   };
 
   memoryList.push(item);
-
-  try {
-    fs.writeFileSync('data.json', JSON.stringify(memoryList, null, 2));
-  } catch (err) {
-    console.error('data.json kaydedilemedi:', err);
-  }
-
+  fs.writeFileSync('data.json', JSON.stringify(memoryList, null, 2));
   res.redirect('/');
 });
 
+// Logout
 app.get('/logout', (req, res) => {
   res.clearCookie('kullanici');
   res.redirect('/login.html');
 });
 
+// Server
 app.listen(PORT, () => {
   console.log(`Site çalışıyor: http://localhost:${PORT}`);
 });
