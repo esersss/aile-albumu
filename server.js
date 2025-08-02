@@ -1,61 +1,48 @@
-const express = require("express");
-const bodyParser = require("body-parser");
-const multer = require("multer");
-const cors = require("cors");
-const path = require("path");
-const fs = require("fs");
+const express = require('express');
+const cors = require('cors');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(cors());
-app.use(bodyParser.json());
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use(express.json());
 
-// --- uploads klasörü kontrolü (önemli) ---
-const uploadDir = path.join(__dirname, "uploads");
+// Upload klasörü yoksa oluştur
+const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
-// Multer ayarı
+// Multer ayarları
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
+    cb(null, Date.now() + '-' + file.originalname);
+  }
 });
 const upload = multer({ storage: storage });
 
-// Ana route
-app.get("/", (req, res) => {
-  res.send("Sunucu Çalışıyor");
-});
+// public klasöründeki statik dosyaları sun
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Fotoğraf yükleme test formu (GET)
-app.get("/upload", (req, res) => {
-  res.send(`
-    <h2>Fotoğraf Yükle</h2>
-    <form method="POST" action="/upload" enctype="multipart/form-data">
-      <input type="file" name="file" />
-      <button type="submit">Yükle</button>
-    </form>
-  `);
-});
-
-// Fotoğraf yükleme (POST)
-app.post("/upload", upload.single("file"), (req, res) => {
+// Foto yükleme endpointi
+app.post('/upload', upload.single('photo'), (req, res) => {
   if (!req.file) {
-    return res.status(400).send("Dosya yüklenmedi.");
+    return res.status(400).json({ message: 'Fotoğraf yüklenmedi' });
   }
-  res.send("Dosya yüklendi: " + req.file.filename);
+  res.json({ message: 'Fotoğraf yüklendi', file: req.file.filename });
 });
 
-// Buradan itibaren senin diğer route’ların varsa onlar aynı şekilde devam edecek
-
-app.listen(PORT, () => {
-  console.log(`Server çalışıyor: ${PORT}`);
+// Ana sayfa
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server ${PORT} portunda çalışıyor`));
+
+
 
