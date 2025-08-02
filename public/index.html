@@ -3,31 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fotoğraf Yükleme</title>
+  <title>Fotoğraf Yükle</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
-    img {
-      cursor: pointer;
-      transition: transform 0.3s ease;
-      max-width: 400px;
-      margin-top: 20px;
-    }
-    #modal {
-      display: none;
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    img { max-width: 200px; cursor: pointer; margin-top: 20px; border: 1px solid #ccc; }
+    #previewContainer { margin-top: 20px; }
+    #overlay {
       position: fixed;
-      z-index: 999;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8);
       justify-content: center;
       align-items: center;
     }
-    #modal img {
+    #overlay img {
       max-width: 90%;
       max-height: 90%;
     }
@@ -36,50 +26,42 @@
 <body>
   <h1>Fotoğraf Yükle</h1>
   <form id="uploadForm">
-    <input type="file" id="photoInput" name="photo" accept="image/*" required>
+    <input type="file" name="photo" id="photo" required />
     <button type="submit">Yükle</button>
   </form>
+  <div id="previewContainer"></div>
 
-  <div id="result" style="margin-top:20px;"></div>
-
-  <!-- Modal -->
-  <div id="modal">
-    <img id="modalImg" src="">
+  <div id="overlay">
+    <img id="overlayImage" />
   </div>
 
   <script>
-    const resultEl = document.getElementById('result');
-    const modal = document.getElementById('modal');
-    const modalImg = document.getElementById('modalImg');
+    const form = document.getElementById('uploadForm');
+    const previewContainer = document.getElementById('previewContainer');
+    const overlay = document.getElementById('overlay');
+    const overlayImage = document.getElementById('overlayImage');
 
-    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const formData = new FormData();
-      const fileField = document.getElementById('photoInput');
-      formData.append('photo', fileField.files[0]);
+      const formData = new FormData(form);
 
-      const response = await fetch('/upload', {
+      const res = await fetch('/upload', {
         method: 'POST',
         body: formData
       });
+      const data = await res.json();
 
-      const result = await response.json();
-      resultEl.textContent = result.message;
+      const imgUrl = `/uploads/${data.file}`;
+      previewContainer.innerHTML = `<img src="${imgUrl}" id="uploadedImg" />`;
 
-      if (result.file) {
-        const img = document.createElement('img');
-        img.src = `/uploads/${result.file}`;
-        img.addEventListener('click', () => {
-          modal.style.display = 'flex';
-          modalImg.src = img.src;
-        });
-        resultEl.appendChild(img);
-      }
+      document.getElementById('uploadedImg').addEventListener('click', () => {
+        overlayImage.src = imgUrl;
+        overlay.style.display = 'flex';
+      });
     });
 
-    // Modal kapatma
-    modal.addEventListener('click', () => {
-      modal.style.display = 'none';
+    overlay.addEventListener('click', () => {
+      overlay.style.display = 'none';
     });
   </script>
 </body>
