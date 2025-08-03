@@ -1,12 +1,12 @@
 require('dotenv').config();
 const express = require('express');
-const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 const bcrypt = require('bcrypt');
 const { createClient } = require('@supabase/supabase-js');
+const multer = require('multer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,12 +20,22 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
+// Multer için storage tanımı (dest yerine diskStorage)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + Date.now() + ext);
+  }
+});
+const upload = multer({ storage });
+
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
-
-const upload = multer({ dest: 'uploads/' });
 
 function auth(req, res, next) {
   if (req.cookies.kullanici) {
@@ -86,17 +96,14 @@ app.get('/upload.html', auth, (req, res) => {
   res.sendFile(__dirname + '/public/upload.html');
 });
 
+// Dosya yükleme
 app.post('/upload', auth, upload.single('media'), async (req, res) => {
   const file = req.file;
-  const ext = path.extname(file.originalname);
-  const newName = `${file.filename}${ext}`;
-  const newPath = path.join('uploads', newName);
-  fs.renameSync(file.path, newPath);
 
-  // Supabase'e kayıt at (dosyaları localde tutuyoruz)
+  // Supabase'e kayıt at
   const { error } = await supabase.from('uploads').insert([
     {
-      url: `/uploads/${newName}`,
+      url: `/uploads/${file.filename}`,
       type: file.mimetype,
       ekleyen: req.cookies.kullanici,
       date: new Date().toISOString()
@@ -118,6 +125,7 @@ app.get('/logout', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Site çalışıyor: http://localhost:${PORT}`);
 });
+
 
 
 
