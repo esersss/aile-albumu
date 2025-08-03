@@ -1,14 +1,73 @@
 
 <!DOCTYPE html>
 <html lang="tr">
-<head><meta charset="UTF-8"><title>Yeni Anı Ekle</title></head>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Fotoğraf Yükle</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .upload-box {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0px 4px 8px rgba(0,0,0,0.1);
+      text-align: center;
+      width: 300px;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    input[type="file"] {
+      margin-bottom: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    a {
+      display: block;
+      margin-top: 20px;
+      text-decoration: none;
+      color: #333;
+    }
+  </style>
+</head>
 <body>
-  <h1>Yeni Fotoğraf veya Video Yükle</h1>
-  <form action="/upload" method="post" enctype="multipart/form-data">
-    <input type="file" name="media" required><br><br>
-    <button type="submit">Yükle</button>
-  </form>
-  <br>
-  <a href="/">← Anasayfaya Dön</a>
+  <div class="upload-box">
+    <h1>Yeni Fotoğraf Ekle</h1>
+    <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">
+      <input type="file" name="media" required />
+      <br>
+      <button type="submit">Yükle</button>
+    </form>
+    <a href="/">← Geri Dön</a>
+  </div>
+
+  <script>
+    const form = document.getElementById('uploadForm');
+    form.addEventListener('submit', () => {
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 1000);
+    });
+  </script>
 </body>
 </html>
