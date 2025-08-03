@@ -7,70 +7,92 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      margin: 20px;
-      background: #f7f7f7;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 0;
     }
-    h1 {
+    header {
+      background: #333;
+      color: white;
+      padding: 10px;
       text-align: center;
     }
-    .gallery {
+    .container {
+      padding: 20px;
+    }
+    .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 15px;
-      margin-top: 20px;
     }
-    .gallery img {
+    .grid img {
       width: 100%;
-      cursor: pointer;
       border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-      transition: transform 0.2s;
+      cursor: pointer;
+      object-fit: cover;
+      height: 200px;
     }
-    .gallery img:hover {
-      transform: scale(1.05);
-    }
-    .logout {
-      display: block;
-      text-align: center;
-      margin: 10px 0;
-    }
-    .upload-link {
-      display: block;
-      text-align: center;
-      margin: 10px 0;
-    }
-    /* Lightbox */
-    #lightbox {
+    /* Modal */
+    .modal {
       display: none;
       position: fixed;
-      z-index: 9999;
-      left: 0; top: 0;
-      width: 100%; height: 100%;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
       background: rgba(0,0,0,0.8);
       justify-content: center;
       align-items: center;
     }
-    #lightbox img {
+    .modal img {
       max-width: 90%;
       max-height: 90%;
+      border: 5px solid white;
       border-radius: 10px;
+    }
+    .close {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      font-size: 30px;
+      color: white;
+      cursor: pointer;
+    }
+    .upload-link {
+      display: inline-block;
+      margin-bottom: 20px;
+      background: #4CAF50;
+      color: white;
+      padding: 10px 15px;
+      border-radius: 5px;
+      text-decoration: none;
+    }
+    .upload-link:hover {
+      background: #45a049;
     }
   </style>
 </head>
 <body>
-  <h1>Fotoğraf Galerisi</h1>
-  <a class="upload-link" href="/upload.html">Yeni Fotoğraf Yükle</a>
-  <a class="logout" href="/logout">Çıkış Yap</a>
-  <div class="gallery" id="gallery"></div>
+  <header>
+    <h1>Fotoğraf Galerisi</h1>
+    <a href="/logout" style="color:white; position:absolute; top:20px; right:20px;">Çıkış Yap</a>
+  </header>
+  <div class="container">
+    <a class="upload-link" href="/upload.html">Yeni Fotoğraf Yükle</a>
+    <div class="grid" id="gallery"></div>
+  </div>
 
-  <div id="lightbox" onclick="closeLightbox()">
-    <img id="lightbox-img" src="" alt="Büyük Görsel">
+  <div class="modal" id="modal">
+    <span class="close" id="close">&times;</span>
+    <img id="modalImg" src="" alt="Büyük Görsel"/>
   </div>
 
   <script>
-    async function fetchData() {
+    async function loadData() {
       const res = await fetch('/data');
       const data = await res.json();
+
       const gallery = document.getElementById('gallery');
       gallery.innerHTML = '';
 
@@ -78,30 +100,21 @@
         if (item.type.startsWith('image/')) {
           const img = document.createElement('img');
           img.src = item.url;
-          img.alt = 'Yüklenen Fotoğraf';
-          img.onclick = () => openLightbox(item.url);
+          img.alt = 'Fotoğraf';
+          img.addEventListener('click', () => {
+            document.getElementById('modalImg').src = item.url;
+            document.getElementById('modal').style.display = 'flex';
+          });
           gallery.appendChild(img);
         }
       });
     }
 
-    function openLightbox(url) {
-      const lightbox = document.getElementById('lightbox');
-      const lightboxImg = document.getElementById('lightbox-img');
-      lightboxImg.src = url;
-      lightbox.style.display = 'flex';
-    }
+    document.getElementById('close').addEventListener('click', () => {
+      document.getElementById('modal').style.display = 'none';
+    });
 
-    function closeLightbox() {
-      document.getElementById('lightbox').style.display = 'none';
-    }
-
-    fetchData();
+    window.onload = loadData;
   </script>
 </body>
 </html>
-
-
-
-
-
