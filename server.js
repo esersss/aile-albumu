@@ -9,7 +9,6 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -17,9 +16,18 @@ app.use(cookieParser());
 // Statik dosyalar
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Upload klasörünü oluştur (recursive ile hata çözümü)
+// Uploads klasörü kontrolü
 const uploadDir = path.join(__dirname, 'uploads');
-fs.mkdirSync(uploadDir, { recursive: true });
+try {
+    if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+        console.log('uploads klasörü oluşturuldu.');
+    } else {
+        console.log('uploads klasörü zaten var.');
+    }
+} catch (err) {
+    console.error('Klasör kontrolü hatası:', err);
+}
 
 // Multer ayarı
 const storage = multer.diskStorage({
@@ -32,61 +40,50 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Basit veritabanı (JSON dosyası)
+// Basit JSON kullanıcı "veritabanı"
 const USERS_FILE = path.join(__dirname, 'users.json');
 
-// Kullanıcıları oku
 function readUsers() {
     if (!fs.existsSync(USERS_FILE)) return [];
     return JSON.parse(fs.readFileSync(USERS_FILE));
 }
 
-// Kullanıcıları kaydet
 function saveUsers(users) {
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 }
 
-// Kayıt olma endpoint
 app.post('/register', async (req, res) => {
     const { username, password } = req.body;
     const users = readUsers();
 
-    const existingUser = users.find(u => u.username === username);
-    if (existingUser) {
+    if (users.find(u => u.username === username)) {
         return res.status(400).send('Kullanıcı zaten var.');
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    users.push({ username, password: hashedPassword });
+    const hashed = await bcrypt.hash(password, 10);
+    users.push({ username, password: hashed });
     saveUsers(users);
 
     res.send('Kayıt başarılı.');
 });
 
-// Giriş yapma endpoint
 app.post('/login', async (req, res) => {
     const { username, password } = req.body;
     const users = readUsers();
 
     const user = users.find(u => u.username === username);
-    if (!user) {
-        return res.status(400).send('Kullanıcı bulunamadı.');
-    }
+    if (!user) return res.status(400).send('Kullanıcı bulunamadı.');
 
     const valid = await bcrypt.compare(password, user.password);
-    if (!valid) {
-        return res.status(400).send('Hatalı şifre.');
-    }
+    if (!valid) return res.status(400).send('Hatalı şifre.');
 
     res.send('Giriş başarılı.');
 });
 
-// Fotoğraf yükleme endpoint
 app.post('/upload', upload.single('photo'), (req, res) => {
     res.send('Fotoğraf yüklendi: ' + req.file.filename);
 });
 
-// HTML dosyaları
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -102,4 +99,5 @@ app.get('/login', (req, res) => {
 app.listen(PORT, () => {
     console.log(`Sunucu çalışıyor: http://localhost:${PORT}`);
 });
+
 
