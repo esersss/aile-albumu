@@ -1,41 +1,28 @@
-require('dotenv').config();
 const express = require('express');
+const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
-const bcrypt = require('bcrypt');
-const { createClient } = require('@supabase/supabase-js');
-const multer = require('multer');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
-// Supabase bağlantısı
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-
-// Upload klasörü
+// Uploads klasörü kontrolü
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
-// Multer için storage tanımı (dest yerine diskStorage)
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + Date.now() + ext);
-  }
-});
-const upload = multer({ storage });
-
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+const users = JSON.parse(fs.readFileSync('users.json'));
+let memoryList = fs.existsSync('data.json') ? JSON.parse(fs.readFileSync('data.json')) : [];
+
+const upload = multer({ dest: 'uploads/' });
 
 function auth(req, res, next) {
   if (req.cookies.kullanici) {
@@ -45,46 +32,14 @@ function auth(req, res, next) {
   }
 }
 
-// Kayıt
-app.post('/register', async (req, res) => {
+app.post('/login', (req, res) => {
   const { ad, soyad, sifre } = req.body;
-
-  const hashedPassword = await bcrypt.hash(sifre, 10);
-
-  const { error } = await supabase
-    .from('users')
-    .insert([{ ad, soyad, sifre: hashedPassword }]);
-
-  if (error) {
-    console.error(error);
-    res.send('Kayıt hatası!');
-  } else {
-    res.redirect('/login.html');
-  }
-});
-
-// Login
-app.post('/login', async (req, res) => {
-  const { ad, soyad, sifre } = req.body;
-
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('ad', ad)
-    .eq('soyad', soyad)
-    .single();
-
-  if (error || !data) {
-    return res.send('Kullanıcı bulunamadı! <a href="/login.html">Tekrar dene</a>');
-  }
-
-  const match = await bcrypt.compare(sifre, data.sifre);
-
-  if (match) {
+  const user = users.find(u => u.ad === ad && u.soyad === soyad && u.sifre === sifre);
+  if (user) {
     res.cookie('kullanici', `${ad} ${soyad}`, { maxAge: 3600000 });
     res.redirect('/');
   } else {
-    res.send('Hatalı şifre! <a href="/login.html">Tekrar dene</a>');
+    res.send('Hatalı giriş! <a href="/login.html">Tekrar dene</a>');
   }
 });
 
@@ -96,24 +51,26 @@ app.get('/upload.html', auth, (req, res) => {
   res.sendFile(__dirname + '/public/upload.html');
 });
 
-// Dosya yükleme
-app.post('/upload', auth, upload.single('media'), async (req, res) => {
+app.get('/data', auth, (req, res) => {
+  res.json(memoryList);
+});
+
+app.post('/upload', auth, upload.single('media'), (req, res) => {
   const file = req.file;
+  const ext = path.extname(file.originalname);
+  const newName = `${file.filename}${ext}`;
+  const newPath = path.join('uploads', newName);
+  fs.renameSync(file.path, newPath);
 
-  // Supabase'e kayıt at
-  const { error } = await supabase.from('uploads').insert([
-    {
-      url: `/uploads/${file.filename}`,
-      type: file.mimetype,
-      ekleyen: req.cookies.kullanici,
-      date: new Date().toISOString()
-    }
-  ]);
+  const item = {
+    url: `/uploads/${newName}`,
+    type: file.mimetype,
+    ekleyen: req.cookies.kullanici,
+    date: new Date()
+  };
 
-  if (error) {
-    console.error(error);
-  }
-
+  memoryList.push(item);
+  fs.writeFileSync('data.json', JSON.stringify(memoryList, null, 2));
   res.redirect('/');
 });
 
@@ -125,8 +82,3 @@ app.get('/logout', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Site çalışıyor: http://localhost:${PORT}`);
 });
-
-
-
-
-
