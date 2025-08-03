@@ -4,84 +4,139 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Aile Albümü</title>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    h1 { text-align: center; }
-    form { text-align: center; margin-bottom: 20px; }
-    .gallery {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 10px;
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f0f0;
+      padding: 20px;
     }
-    .gallery img {
-      width: 100%;
+    h1 {
+      text-align: center;
+    }
+    #upload-form {
+      text-align: center;
+      margin-top: 20px;
+      margin-bottom: 20px;
+    }
+    #gallery {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    #gallery img {
+      width: 200px;
+      height: auto;
+      margin: 10px;
       cursor: pointer;
       border-radius: 8px;
-      transition: transform 0.3s;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      transition: transform 0.2s;
     }
-    .gallery img:hover {
+    #gallery img:hover {
       transform: scale(1.05);
     }
-    #modal {
-      display: none;
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: rgba(0,0,0,0.8);
-      justify-content: center;
-      align-items: center;
-    }
-    #modal img {
-      max-width: 90%;
-      max-height: 90%;
-      border-radius: 10px;
+    #status {
+      text-align: center;
+      color: green;
+      font-weight: bold;
     }
   </style>
 </head>
 <body>
-  <h1>Fotoğraf Yükle</h1>
-  <form action="/upload" method="post" enctype="multipart/form-data">
-    <input type="file" name="photo" required>
-    <button type="submit">Yükle</button>
-  </form>
+  <h1>Aile Albümü</h1>
 
-  <div class="gallery" id="gallery"></div>
-
-  <div id="modal" onclick="this.style.display='none'">
-    <img id="modal-img" src="">
+  <div id="upload-form">
+    <input type="file" id="fileInput" />
+    <button onclick="uploadImage()">Fotoğraf Yükle</button>
   </div>
+  <div id="status"></div>
+
+  <div id="gallery"></div>
 
   <script>
-    // Yüklenen resimleri göstermek için uploads klasöründeki resimleri çek
-    async function loadImages() {
-      const res = await fetch('/uploads');
-      const text = await res.text();
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(text, 'text/html');
-      const links = Array.from(doc.querySelectorAll('a'))
-        .map(a => a.getAttribute('href'))
-        .filter(href => href && !href.endsWith('/'));
+    const { createClient } = supabase;
 
-      const gallery = document.getElementById('gallery');
-      gallery.innerHTML = '';
-      links.forEach(link => {
+    const SUPABASE_URL = "https://evbggatgrziibyjvtoiy.supabase.co"; 
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2YmdnYXRncnppaWJ5anZ0b2l5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMTA5MzEsImV4cCI6MjA2OTc4NjkzMX0.O0MvkNq8yHAjevut5epVNvTFYEcgbHlNS4AquZhKFFY";
+
+    const _supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    async function showImages() {
+      let { data, error } = await _supabase
+        .storage
+        .from('fotograflar') 
+        .list('', { limit: 100 });
+
+      if (error) {
+        console.error(error);
+        return;
+      }
+
+      const container = document.getElementById('gallery');
+      container.innerHTML = '';
+
+      data.forEach(file => {
+        const url = `${SUPABASE_URL}/storage/v1/object/public/fotograflar/${file.name}`;
         const img = document.createElement('img');
-        img.src = '/uploads/' + link.split('/').pop();
-        img.onclick = () => showModal(img.src);
-        gallery.appendChild(img);
+        img.src = url;
+
+        img.onclick = () => {
+          const big = document.createElement('div');
+          big.style.position = 'fixed';
+          big.style.top = '0';
+          big.style.left = '0';
+          big.style.width = '100%';
+          big.style.height = '100%';
+          big.style.background = 'rgba(0,0,0,0.8)';
+          big.style.display = 'flex';
+          big.style.alignItems = 'center';
+          big.style.justifyContent = 'center';
+          big.onclick = () => big.remove();
+
+          const bigImg = document.createElement('img');
+          bigImg.src = url;
+          bigImg.style.maxWidth = '90%';
+          bigImg.style.maxHeight = '90%';
+          big.appendChild(bigImg);
+          document.body.appendChild(big);
+        };
+
+        container.appendChild(img);
       });
     }
 
-    function showModal(src) {
-      const modal = document.getElementById('modal');
-      document.getElementById('modal-img').src = src;
-      modal.style.display = 'flex';
+    async function uploadImage() {
+      const fileInput = document.getElementById('fileInput');
+      const file = fileInput.files[0];
+      if (!file) {
+        alert('Lütfen bir dosya seçin!');
+        return;
+      }
+
+      const fileName = `${Date.now()}_${file.name}`;
+
+      const { error } = await _supabase.storage
+        .from('fotograflar')
+        .upload(fileName, file);
+
+      const statusDiv = document.getElementById('status');
+      if (error) {
+        console.error(error);
+        statusDiv.innerText = "Yükleme hatası!";
+      } else {
+        statusDiv.innerText = "Yükleme başarılı!";
+        fileInput.value = '';
+        showImages();
+      }
     }
 
-    loadImages();
+    showImages();
   </script>
 </body>
 </html>
+
 
 
 
