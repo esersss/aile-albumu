@@ -1,84 +1,105 @@
 const express = require('express');
-const multer = require('multer');
-const fs = require('fs');
 const path = require('path');
-const bodyParser = require('body-parser');
+const bcrypt = require('bcrypt');
+const fs = require('fs');
+const multer = require('multer');
 const cookieParser = require('cookie-parser');
+require('dotenv').config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-// Uploads klasörü kontrolü
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-}
-
-app.use(express.static('public'));
-app.use('/uploads', express.static('uploads'));
-app.use(bodyParser.urlencoded({ extended: true }));
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-const users = JSON.parse(fs.readFileSync('users.json'));
-let memoryList = fs.existsSync('data.json') ? JSON.parse(fs.readFileSync('data.json')) : [];
+// Statik dosyalar
+app.use(express.static(path.join(__dirname, 'public')));
 
-const upload = multer({ dest: 'uploads/' });
+// Upload klasörünü oluştur (recursive ile hata çözümü)
+const uploadDir = path.join(__dirname, 'uploads');
+fs.mkdirSync(uploadDir, { recursive: true });
 
-function auth(req, res, next) {
-  if (req.cookies.kullanici) {
-    next();
-  } else {
-    res.redirect('/login.html');
-  }
+// Multer ayarı
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + '-' + file.originalname);
+    }
+});
+const upload = multer({ storage });
+
+// Basit veritabanı (JSON dosyası)
+const USERS_FILE = path.join(__dirname, 'users.json');
+
+// Kullanıcıları oku
+function readUsers() {
+    if (!fs.existsSync(USERS_FILE)) return [];
+    return JSON.parse(fs.readFileSync(USERS_FILE));
 }
 
-app.post('/login', (req, res) => {
-  const { ad, soyad, sifre } = req.body;
-  const user = users.find(u => u.ad === ad && u.soyad === soyad && u.sifre === sifre);
-  if (user) {
-    res.cookie('kullanici', `${ad} ${soyad}`, { maxAge: 3600000 });
-    res.redirect('/');
-  } else {
-    res.send('Hatalı giriş! <a href="/login.html">Tekrar dene</a>');
-  }
+// Kullanıcıları kaydet
+function saveUsers(users) {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+}
+
+// Kayıt olma endpoint
+app.post('/register', async (req, res) => {
+    const { username, password } = req.body;
+    const users = readUsers();
+
+    const existingUser = users.find(u => u.username === username);
+    if (existingUser) {
+        return res.status(400).send('Kullanıcı zaten var.');
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    users.push({ username, password: hashedPassword });
+    saveUsers(users);
+
+    res.send('Kayıt başarılı.');
 });
 
-app.get('/', auth, (req, res) => {
-  res.sendFile(__dirname + '/public/index.html');
+// Giriş yapma endpoint
+app.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+    const users = readUsers();
+
+    const user = users.find(u => u.username === username);
+    if (!user) {
+        return res.status(400).send('Kullanıcı bulunamadı.');
+    }
+
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) {
+        return res.status(400).send('Hatalı şifre.');
+    }
+
+    res.send('Giriş başarılı.');
 });
 
-app.get('/upload.html', auth, (req, res) => {
-  res.sendFile(__dirname + '/public/upload.html');
+// Fotoğraf yükleme endpoint
+app.post('/upload', upload.single('photo'), (req, res) => {
+    res.send('Fotoğraf yüklendi: ' + req.file.filename);
 });
 
-app.get('/data', auth, (req, res) => {
-  res.json(memoryList);
+// HTML dosyaları
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.post('/upload', auth, upload.single('media'), (req, res) => {
-  const file = req.file;
-  const ext = path.extname(file.originalname);
-  const newName = `${file.filename}${ext}`;
-  const newPath = path.join('uploads', newName);
-  fs.renameSync(file.path, newPath);
-
-  const item = {
-    url: `/uploads/${newName}`,
-    type: file.mimetype,
-    ekleyen: req.cookies.kullanici,
-    date: new Date()
-  };
-
-  memoryList.push(item);
-  fs.writeFileSync('data.json', JSON.stringify(memoryList, null, 2));
-  res.redirect('/');
+app.get('/register', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'register.html'));
 });
 
-app.get('/logout', (req, res) => {
-  res.clearCookie('kullanici');
-  res.redirect('/login.html');
+app.get('/login', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
 app.listen(PORT, () => {
-  console.log(`Site çalışıyor: http://localhost:${PORT}`);
+    console.log(`Sunucu çalışıyor: http://localhost:${PORT}`);
 });
+
