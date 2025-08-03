@@ -10,22 +10,24 @@ const { createClient } = require('@supabase/supabase-js');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Supabase ayarları
+// Supabase bağlantısı
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
 
-// Local uploads klasörü (geçici)
+// Klasör kontrolleri
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
 app.use(express.static('public'));
+app.use('/uploads', express.static('uploads'));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// Kullanıcılar
 const users = JSON.parse(fs.readFileSync('users.json'));
 let memoryList = fs.existsSync('data.json')
   ? JSON.parse(fs.readFileSync('data.json'))
@@ -33,15 +35,16 @@ let memoryList = fs.existsSync('data.json')
 
 const upload = multer({ dest: 'uploads/' });
 
+// Giriş kontrolü
 function auth(req, res, next) {
-  if (req.cookies.kullanici) {
-    next();
-  } else {
-    res.redirect('/login.html');
+  const user = req.cookies.kullanici;
+  if (!user) {
+    return res.redirect('/login.html');
   }
+  next();
 }
 
-// LOGIN
+// Login
 app.post('/login', (req, res) => {
   const { ad, soyad, sifre } = req.body;
   const user = users.find(
@@ -55,65 +58,61 @@ app.post('/login', (req, res) => {
   }
 });
 
-// SAYFALAR
+// Ana sayfa
 app.get('/', auth, (req, res) => {
   res.sendFile(__dirname + '/public/index.html');
 });
 
+// Upload sayfası
 app.get('/upload.html', auth, (req, res) => {
   res.sendFile(__dirname + '/public/upload.html');
 });
 
+// Data listesi
 app.get('/data', auth, (req, res) => {
   res.json(memoryList);
 });
 
-// UPLOAD (Supabase)
+// Upload işlemi
 app.post('/upload', auth, upload.single('media'), async (req, res) => {
   const file = req.file;
   const ext = path.extname(file.originalname);
-  const newFileName = `${Date.now()}_${file.originalname}`;
+  const newName = `${file.filename}${ext}`;
+  const newPath = path.join('uploads', newName);
+  fs.renameSync(file.path, newPath);
 
   try {
-    // Supabase bucket'a yükle
+    // Supabase'e yükle
     const { data, error } = await supabase.storage
       .from('uploads')
-      .upload(newFileName, fs.createReadStream(file.path), {
+      .upload(newName, fs.readFileSync(newPath), {
         contentType: file.mimetype,
-        duplex: 'half'
       });
 
     if (error) {
       console.error('Supabase yükleme hatası:', error);
-      return res.status(500).send('Yükleme başarısız');
+      return res.status(500).send('Yükleme başarısız!');
     }
 
-    // Public URL oluştur
-    const { data: publicUrlData } = supabase.storage
-      .from('uploads')
-      .getPublicUrl(newFileName);
+    const publicUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/uploads/${newName}`;
 
     const item = {
-      url: publicUrlData.publicUrl,
+      url: publicUrl,
       type: file.mimetype,
       ekleyen: req.cookies.kullanici,
-      date: new Date()
+      date: new Date(),
     };
 
     memoryList.push(item);
     fs.writeFileSync('data.json', JSON.stringify(memoryList, null, 2));
-
-    // Temp dosyayı sil
-    fs.unlinkSync(file.path);
-
     res.redirect('/');
   } catch (err) {
-    console.error('Hata:', err);
-    res.status(500).send('Bir hata oluştu.');
+    console.error(err);
+    res.status(500).send('Bir hata oluştu');
   }
 });
 
-// LOGOUT
+// Logout
 app.get('/logout', (req, res) => {
   res.clearCookie('kullanici');
   res.redirect('/login.html');
