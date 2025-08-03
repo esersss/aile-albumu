@@ -1,10 +1,12 @@
-const express = require("express");
-const path = require("path");
-const multer = require("multer");
-const cookieParser = require("cookie-parser");
-const fs = require("fs");
-require("dotenv").config();
-const { createClient } = require("@supabase/supabase-js");
+require('dotenv').config();
+const express = require('express');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
+const bodyParser = require('body-parser');
+const cookieParser = require('cookie-parser');
+const bcrypt = require('bcrypt');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,89 +17,125 @@ const supabase = createClient(
   process.env.SUPABASE_KEY
 );
 
-// uploads klasörünü güvenli bir şekilde oluştur
-const uploadDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
 // Middleware
-app.use(express.static(path.join(__dirname, "public")));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.static('public'));
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Multer ayarları
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads/");
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
-});
-const upload = multer({ storage });
+// Multer memory storage (dosyayı geçici bellekte tutacağız)
+const upload = multer({ storage: multer.memoryStorage() });
 
-// Basit login sistemi
-const PASSWORD = process.env.ADMIN_PASSWORD || "1234";
-
-// Login sayfası
-app.get("/login", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "login.html"));
-});
-
-// Login post
-app.post("/login", (req, res) => {
-  const { password } = req.body;
-  if (password === PASSWORD) {
-    res.cookie("auth", "true", { httpOnly: true });
-    res.redirect("/");
-  } else {
-    res.send("Hatalı şifre!");
-  }
-});
-
-// Auth kontrolü middleware
-function checkAuth(req, res, next) {
-  if (req.cookies.auth === "true") {
+// Auth middleware
+function auth(req, res, next) {
+  if (req.cookies.kullanici) {
     next();
   } else {
-    res.redirect("/login");
+    res.redirect('/login.html');
   }
 }
 
-// Ana sayfa
-app.get("/", checkAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
+// Register endpoint
+app.post('/register', async (req, res) => {
+  const { first_name, last_name, password } = req.body;
 
-// Fotoğraf yükleme
-app.post("/upload", checkAuth, upload.single("photo"), async (req, res) => {
-  const file = req.file;
-
-  if (!file) {
-    return res.status(400).send("Dosya yüklenemedi");
+  if (!first_name || !last_name || !password) {
+    return res.status(400).send('Eksik bilgi!');
   }
 
-  // Supabase storage'a yükleme
+  // Şifreyi hashle
+  const password_hash = await bcrypt.hash(password, 10);
+
+  // Supabase'e kaydet
+  const { data, error } = await supabase
+    .from('users')
+    .insert([{ first_name, last_name, password_hash }]);
+
+  if (error) {
+    console.error(error);
+    return res.status(500).send('Kayıt sırasında hata oluştu!');
+  }
+
+  res.send('Kayıt başarılı! <a href="/login.html">Giriş yap</a>');
+});
+
+// Login endpoint
+app.post('/login', async (req, res) => {
+  const { first_name, last_name, password } = req.body;
+
+  // Kullanıcıyı bul
+  const { data: users, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('first_name', first_name)
+    .eq('last_name', last_name);
+
+  if (error || users.length === 0) {
+    return res.send('Hatalı giriş! <a href="/login.html">Tekrar dene</a>');
+  }
+
+  const user = users[0];
+
+  // Şifre kontrol
+  const match = await bcrypt.compare(password, user.password_hash);
+  if (!match) {
+    return res.send('Hatalı şifre! <a href="/login.html">Tekrar dene</a>');
+  }
+
+  // Cookie ata
+  res.cookie('kullanici', `${first_name} ${last_name}`, { maxAge: 3600000 });
+  res.redirect('/');
+});
+
+// Ana sayfa
+app.get('/', auth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/index.html'));
+});
+
+// Upload sayfası
+app.get('/upload.html', auth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/upload.html'));
+});
+
+// Upload endpoint (Supabase Storage)
+app.post('/upload', auth, upload.single('media'), async (req, res) => {
+  const file = req.file;
+  const fileExt = path.extname(file.originalname);
+  const fileName = `${Date.now()}${fileExt}`;
+
+  // Supabase Storage'a yükle
   const { data, error } = await supabase.storage
-    .from("photos")
-    .upload(file.filename, fs.createReadStream(file.path), {
-      cacheControl: "3600",
-      upsert: false,
+    .from('uploads') // storage bucket adı "uploads" olmalı
+    .upload(fileName, file.buffer, {
       contentType: file.mimetype,
+      upsert: false,
     });
 
   if (error) {
     console.error(error);
-    return res.status(500).send("Supabase upload hatası");
+    return res.status(500).send('Dosya yüklenemedi!');
   }
 
-  res.send("Fotoğraf başarıyla yüklendi!");
+  // Public URL oluştur
+  const { data: publicData } = supabase.storage
+    .from('uploads')
+    .getPublicUrl(fileName);
+
+  // Yüklenen dosya bilgisi
+  console.log('Yüklendi:', publicData.publicUrl);
+
+  res.redirect('/');
 });
 
-// Sunucu başlat
-app.listen(PORT, () => {
-  console.log(`Server çalışıyor: http://localhost:${PORT}`);
+// Logout
+app.get('/logout', (req, res) => {
+  res.clearCookie('kullanici');
+  res.redirect('/login.html');
 });
+
+// Sunucuyu başlat
+app.listen(PORT, () => {
+  console.log(`Site çalışıyor: http://localhost:${PORT}`);
+});
+
 
 
