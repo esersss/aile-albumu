@@ -1,5 +1,3 @@
-
-
 require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
@@ -10,13 +8,19 @@ const cookieParser = require('cookie-parser');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-// Supabase client
+// Supabase ayarları
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
+
+// Local uploads klasörü (geçici)
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
 
 app.use(express.static('public'));
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -37,6 +41,7 @@ function auth(req, res, next) {
   }
 }
 
+// LOGIN
 app.post('/login', (req, res) => {
   const { ad, soyad, sifre } = req.body;
   const user = users.find(
@@ -50,6 +55,7 @@ app.post('/login', (req, res) => {
   }
 });
 
+// SAYFALAR
 app.get('/', auth, (req, res) => {
   res.sendFile(__dirname + '/public/index.html');
 });
@@ -62,50 +68,52 @@ app.get('/data', auth, (req, res) => {
   res.json(memoryList);
 });
 
+// UPLOAD (Supabase)
 app.post('/upload', auth, upload.single('media'), async (req, res) => {
   const file = req.file;
-  const fileExt = path.extname(file.originalname);
-  const fileName = `${Date.now()}_${file.originalname}`;
-  const filePath = file.path;
+  const ext = path.extname(file.originalname);
+  const newFileName = `${Date.now()}_${file.originalname}`;
 
   try {
-    // Dosyayı Supabase Storage'a yükle
+    // Supabase bucket'a yükle
     const { data, error } = await supabase.storage
-      .from('uploads') // supabase'de bucket adı "uploads" olacak
-      .upload(fileName, fs.createReadStream(filePath), {
+      .from('uploads')
+      .upload(newFileName, fs.createReadStream(file.path), {
         contentType: file.mimetype,
-        upsert: false,
+        duplex: 'half'
       });
 
-    fs.unlinkSync(filePath); // local geçici dosyayı sil
-
     if (error) {
-      console.error('Supabase upload hatası:', error.message);
-      return res.status(500).send('Upload başarısız!');
+      console.error('Supabase yükleme hatası:', error);
+      return res.status(500).send('Yükleme başarısız');
     }
 
-    // Public URL al
+    // Public URL oluştur
     const { data: publicUrlData } = supabase.storage
       .from('uploads')
-      .getPublicUrl(fileName);
+      .getPublicUrl(newFileName);
 
     const item = {
       url: publicUrlData.publicUrl,
       type: file.mimetype,
       ekleyen: req.cookies.kullanici,
-      date: new Date(),
+      date: new Date()
     };
 
     memoryList.push(item);
     fs.writeFileSync('data.json', JSON.stringify(memoryList, null, 2));
 
+    // Temp dosyayı sil
+    fs.unlinkSync(file.path);
+
     res.redirect('/');
   } catch (err) {
     console.error('Hata:', err);
-    res.status(500).send('Bir hata oluştu');
+    res.status(500).send('Bir hata oluştu.');
   }
 });
 
+// LOGOUT
 app.get('/logout', (req, res) => {
   res.clearCookie('kullanici');
   res.redirect('/login.html');
@@ -114,3 +122,4 @@ app.get('/logout', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Site çalışıyor: http://localhost:${PORT}`);
 });
+
